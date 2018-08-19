@@ -13,8 +13,7 @@ trans = transforms.Compose(
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ]
     )
-dataset = torchvision.datasets.ImageFolder("./dataset/LASIESTA/", transform=trans)
-dataloader = DataLoader(dataset, batch_size=2, shuffle=False)
+
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
 def has_file_allowed_extension(filename, extensions):
@@ -174,7 +173,7 @@ class plot_dataset(Dataset):
 
 
 if __name__ == "__main__":
-    dir = "./dataset/LASIESTA/"
+    dir = "/media/DATASET/MMM2019/LASIESTA/"
     # sg = scenePairs_dataset(dir, 500, 10, 10)
 
     # test = DataLoader(sg, batch_size=5)
@@ -182,8 +181,11 @@ if __name__ == "__main__":
     #     t[2][3:]=0
     #     print(t[2])
     #     break
-    plot_d = plot_dataset(dir, 5, 20)
+    plot_d = DataLoader(plot_dataset(dir, 5, 20), 20)
 
-    print(plot_d[1])
-    print(plot_d[99].size())
-    print(len(plot_d))
+    for img in plot_d:
+        print(img.size())
+        print(img[0:1].size())
+        break
+
+    

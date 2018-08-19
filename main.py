@@ -34,9 +34,9 @@ class Trainer():
         self.optimDE = torch.optim.Adam(self.netDE.parameters(), lr=opt.learningRate, betas=(opt.beta1, 0.999))
         self.optimSD = torch.optim.Adam(self.netSD.parameters(), lr=opt.learningRate, betas=(opt.beta1, 0.999))
 
-        self.trainDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, opt.epochSize, opt.maxStep), opt.batchSize)
-        self.valDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, 10, opt.maxStep), opt.batchSize)
-        self.plotDateloader = DataLoader(plot_dataset(opt.dataRoot, 3, 20), 3*20)
+        self.trainDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, opt.epochSize, opt.maxStep), opt.batchSize, num_workers=4)
+        self.valDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, 10, opt.maxStep), opt.batchSize, num_workers=4)
+        self.plotDateloader = DataLoader(plot_dataset(opt.dataRoot, 3, 20), 20)
 
         self.rec_criterion = nn.MSELoss()
         self.sim_criterion = nn.MSELoss()
@@ -160,10 +160,26 @@ class Trainer():
             self.optimSD.load_state_dict(checkpoint['optimSE'])
         except:
             pass
+    def plot_pred(self, fnames, f_name):
+        pass
 
-    def plot_swap(self, fname):
-        for 
+    def plot_swap(self, f_name):
+        hp_seq = []
+        hc = []
+        for vids in self.plotDateloader:
+            vids = vids.to(device)
+            hp_seq.append(self.netPE(vids)).clone()
+            hc.append(self.netEC(vids[0:1]))
+            
+        pred = []
+        for i in range(len(hc)):
+            pred.append(self.netDE())
+
         
+
+
+
+
 
 
     def evaluation(self):

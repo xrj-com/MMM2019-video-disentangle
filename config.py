@@ -3,9 +3,9 @@ class opt:
     beta1 = 0.9                      # momentum term for adam
     batchSize = 100               # batch size  
     gpu = 0                # gpu to use  
-    save = './exp1'          # base directory to save logs  
+    save = '/media/USERDATA/xrj/MMM2019/exp1'          # base directory to save logs  
     name = 'default'        # checkpoint name
-    dataRoot = "./dataset/LASIESTA/" # data root directory
+    dataRoot = "/media/DATASET/MMM2019/LASIESTA/" # data root directory
     optimizer = 'adam'           # optimizer to train with
     nEpochs  = 200              # max training epochs  
     seed      = 1                # random seed  
@@ -25,4 +25,5 @@ class opt:
     depth      = 18              # depth of resnet 
     nThreads   = 0                # number of dataloading threads
     dataPool   = 200
-    dataWarmup = 10  
+    dataWarmup = 10 
+    
