@@ -36,7 +36,7 @@ class Trainer():
 
         self.trainDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, opt.epochSize, opt.maxStep), opt.batchSize, num_workers=4)
         self.valDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, 10, opt.maxStep), opt.batchSize, num_workers=4)
-        self.plotDateloader = DataLoader(plot_dataset(opt.dataRoot, 3, 20), 20)
+        self.plotDateloader = DataLoader(plot_dataset(opt.dataRoot, 10, 20), 20)
 
         self.rec_criterion = nn.MSELoss()
         self.sim_criterion = nn.MSELoss()
@@ -163,17 +163,20 @@ class Trainer():
     def plot_pred(self, fnames, f_name):
         pass
 
-    def plot_swap(self, f_name):
+    def plot(self, f_name):
         hp_seq = []
         hc = []
-        for vids in self.plotDateloader:
+        for i, vids in enumerate(self.plotDateloader):
+            torchvision.utils.save_image(vids, f_name + 'origin{}.jpg'.format(i), normalize=True)
             vids = vids.to(device)
-            hp_seq.append(self.netPE(vids)).clone()
-            hc.append(self.netEC(vids[0:1]))
-            
-        pred = []
-        for i in range(len(hc)):
-            pred.append(self.netDE())
+            hp_seq.append(self.netPE(vids).clone())
+            hc.append(self.netCE(vids[0:1]))
+        
+        max_step = hp_seq[0].size(0)
+        sample_num = len(hp_seq)
+        for i in range(sample_num):
+            pred = self.netDE(hc[i].repeat(max_step,1,1,1), hp_seq[i])
+            torchvision.utils.save_image(pred, f_name +'pred{}.jpg'.format(i), normalize=True)
 
         
 
@@ -181,9 +184,14 @@ class Trainer():
 
 
 
-
-    def evaluation(self):
-        pass
+    def evaluation(self, is_best):
+        self.netCE.eval()
+        self.netPE.eval()
+        self.netDE.eval()
+        self.netSD.eval()
+    
+        self.load_chkpt(is_best=is_best)
+        self.plot('./logs/')
 
     def run(self, resume=True, is_best=False):
         self.best_rec = 1e10

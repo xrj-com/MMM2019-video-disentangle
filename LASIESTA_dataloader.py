@@ -10,7 +10,7 @@ trans = transforms.Compose(
     [   
         transforms.Resize((64, 64)),
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ]
     )
 
@@ -185,6 +185,7 @@ if __name__ == "__main__":
 
     for img in plot_d:
         print(img.size())
+        print(img.repeat(4, 1, 1, 1).size())
         print(img[0:1].size())
         break
 

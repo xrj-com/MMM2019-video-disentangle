@@ -3,7 +3,7 @@ class opt:
     beta1 = 0.9                      # momentum term for adam
     batchSize = 100               # batch size  
     gpu = 0                # gpu to use  
-    save = '/media/USERDATA/xrj/MMM2019/exp1'          # base directory to save logs  
+    save = '/media/USERDATA/xrj/MMM2019/exp2'          # base directory to save logs  
     name = 'default'        # checkpoint name
     dataRoot = "/media/DATASET/MMM2019/LASIESTA/" # data root directory
     optimizer = 'adam'           # optimizer to train with
