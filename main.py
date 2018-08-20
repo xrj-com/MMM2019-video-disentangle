@@ -14,7 +14,6 @@ from dumblog import dlog
 trainLogger = dlog(os.path.join(opt.save,'train'))
 valLogger = dlog(os.path.join(opt.save,'val'))
 
-utils.backup_src('./', os.path.join(opt.save, 'backUpSrc'))
 
 device = torch.device("cuda:{:d}".format(opt.gpu) if torch.cuda.is_available() else "cpu")
 
@@ -123,15 +122,18 @@ class Trainer():
         self.train_recon_discriminator(pred, img2, target.view(-1, 1).to(torch.float32), iter=5)
         pred_score = self.netRD(pred, img2)
         pred_nll = self.bce_criterion(pred_score, target2.view(-1, 1).to(torch.float32))
-        pred_nll.backward(retain_graph=True)
-        pred_mse = self.rec_criterion(pred, img2)
-        pred_mse.backward()
+        if self.opt.is_mse:
+            pred_nll.backward(retain_graph=True)
+            pred_mse = self.rec_criterion(pred, img2)
+            pred_mse.backward()
+        else:
+            pred_nll.backward()
 
         self.optimCE.step()
         self.optimPE.step()
         self.optimDE.step()
 
-        return pred_mse.item(), latent_mse.item()
+        return pred_nll.item(), latent_mse.item()
 
     def test(self, img1, img2, img3, origin_target):
         target = origin_target.clone()
@@ -198,14 +200,15 @@ class Trainer():
             self.optimDE.load_state_dict(checkpoint['optimDE'])
             self.optimSD.load_state_dict(checkpoint['optimSD'])
             self.optimRD.load_state_dict(checkpoint['optimRD'])
-            print('Success loading checkpoint!')
+            print('Success loading {}th epoch checkpoint!'.format(self.epoch_now))
         except:
             print('Failed to load checkpoint!')
 
-    def plot(self):
+    def plot(self, is_swap=False):
         hp_seq = []
         hc = []
-        save_path = os.path.join(self.opt.save, 'plot')
+        dir = 'plot_swap' if is_swap else 'plot'
+        save_path = os.path.join(self.opt.save, dir)
         if not os.path.exists(save_path):
             os.makedirs(save_path)
         for i, vids in enumerate(self.plotDateloader):
@@ -217,7 +220,11 @@ class Trainer():
         max_step = hp_seq[0].size(0)
         sample_num = len(hp_seq)
         for i in range(sample_num):
-            pred = self.netDE(hc[i].repeat(max_step,1,1,1), hp_seq[i])
+            if is_swap:
+                ii = 1
+            else:
+                ii = i
+            pred = self.netDE(hc[i].repeat(max_step,1,1,1), hp_seq[ii])
             torchvision.utils.save_image(pred, os.path.join(save_path, 'pred{}.jpg'.format(i)), normalize=True)
 
     def unit_test(self):
@@ -232,9 +239,10 @@ class Trainer():
         self.netPE.eval()
         self.netDE.eval()
         self.netSD.eval()
-    
+        print('Evalation..')
         self.load_chkpt(is_best=is_best)
         self.plot()
+        self.plot(is_swap=True)
 
     def run(self, resume=True, is_best=False):
         self.best_rec = 1e10
@@ -266,7 +274,7 @@ class Trainer():
                 iteration += 1
                 self.total_iter += 1
 
-            trainLogger.info('{:d}\tprediction mse = {:.4f}, latent mse = {:.4f},'
+            trainLogger.info('{:d}\tprediction nll = {:.4f}, latent mse = {:.4f},'
             ' scene disc acc = {:.4f}%, scene disc nll = {:.4f}'.format(
                 self.total_iter, 
                 pred_mse/iteration, 
@@ -310,5 +318,6 @@ if __name__ == "__main__":
     if opt.eval:
         trainer.evaluation(True)
     else:
+        utils.backup_src('./', os.path.join(opt.save, 'backUpSrc'))
         trainer.run()
         
