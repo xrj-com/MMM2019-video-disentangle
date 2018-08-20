@@ -32,6 +32,8 @@ def backup_src(src_root, target_root, reg='*.py'):
         shutil.copyfile(os.path.join(src_root, file), os.path.join(target_root, file))
     print('Finish!')
 
+
+
 if __name__ == "__main__":
     src_root = './'
     backup_src(src_root, None)

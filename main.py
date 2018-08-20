@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision
 from config import opt
-from models import ContentEncoder, PoseEncoder, Decoder, SceneDiscriminator
+from models import ContentEncoder, PoseEncoder, Decoder, SceneDiscriminator, RecDiscriminator
 from torch.utils.data import DataLoader
 from LASIESTA_dataloader import scenePairs_dataset, plot_dataset
 import utils
@@ -11,12 +11,12 @@ if not os.path.exists(opt.save):
         os.makedirs(opt.save)
 
 from dumblog import dlog
-trainLogger = dlog('train')
-valLogger = dlog('val')
+trainLogger = dlog(os.path.join(opt.save,'train'))
+valLogger = dlog(os.path.join(opt.save,'val'))
+
 utils.backup_src('./', os.path.join(opt.save, 'backUpSrc'))
 
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:{:d}".format(opt.gpu) if torch.cuda.is_available() else "cpu")
 
 class Trainer():
     def __init__(self, opt):
@@ -25,23 +25,53 @@ class Trainer():
         self.netPE = PoseEncoder(inD=3, poseDim=opt.poseDim, is_norm=opt.normalize).to(device)
         self.netDE = Decoder(inD=opt.contentDim+opt.poseDim).to(device)
         self.netSD = SceneDiscriminator(poseDim=opt.poseDim).to(device)
+        # my work
+        self.netRD = RecDiscriminator(inD=6).to(device)
+
         self.netCE.weight_init(mean=0, std=0.02)
         self.netPE.weight_init(mean=0, std=0.02)
         self.netDE.weight_init(mean=0, std=0.02)
+        self.netRD.weight_init(mean=0, std=0.02)
 
         self.optimCE = torch.optim.Adam(self.netCE.parameters(), lr=opt.learningRate, betas=(opt.beta1, 0.999))
         self.optimPE = torch.optim.Adam(self.netPE.parameters(), lr=opt.learningRate, betas=(opt.beta1, 0.999))
         self.optimDE = torch.optim.Adam(self.netDE.parameters(), lr=opt.learningRate, betas=(opt.beta1, 0.999))
         self.optimSD = torch.optim.Adam(self.netSD.parameters(), lr=opt.learningRate, betas=(opt.beta1, 0.999))
+        self.optimRD = torch.optim.Adam(self.netRD.parameters(), lr=opt.learningRate, betas=(opt.beta1, 0.999))
 
         self.trainDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, opt.epochSize, opt.maxStep), opt.batchSize, num_workers=4)
         self.valDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, 10, opt.maxStep), opt.batchSize, num_workers=4)
-        self.plotDateloader = DataLoader(plot_dataset(opt.dataRoot, 10, 20), 20)
+        self.plotDateloader = DataLoader(plot_dataset(opt.dataVal, 10, 20), 20)
 
         self.rec_criterion = nn.MSELoss()
         self.sim_criterion = nn.MSELoss()
         self.bce_criterion = nn.BCELoss()
 
+    def train_recon_discriminator(self, pred, img2, origin_target, iter=5):
+        self.netRD.train()
+        pred = pred.detach()
+        img2 = img2.detach()
+        target_pred = origin_target.detach()
+        target_img2 = origin_target.detach()
+        target_pred[:] = 0.0
+        target_img2[:] = 1.0
+        target = torch.cat([target_pred, target_img2], 0)
+
+
+        input1 = torch.cat([pred, img2], 0)
+        input2 = torch.cat([img2, img2], 0)
+
+        for i in range(iter):
+            self.optimRD.zero_grad()
+            out = self.netRD(input1, input2)
+            loss = self.bce_criterion(out, target)
+            # print(loss)
+            loss.backward()
+            self.optimRD.step()    
+        #     acc += torch.mean((out > 0.5).to(torch.float32) - target)
+        # acc = acc / iter
+        self.netRD.eval()
+        # return acc.item()
 
     def train_scene_discriminator(self, img1, img2, origin_target):
         self.optimSD.zero_grad()
@@ -66,6 +96,7 @@ class Trainer():
 
     def train(self, img1, img2, img3, origin_target):
         target = origin_target.clone()
+        target2 = origin_target.clone()
         self.optimPE.zero_grad()
         self.optimCE.zero_grad()
         self.optimDE.zero_grad()
@@ -76,7 +107,7 @@ class Trainer():
         hp2 = self.netPE(img2)
 
         # minimize ||hc1 - hc2||
-        latent_mse = torch.sum((hc1 - hc2)**2)/ hc1.size(0)
+        latent_mse = torch.mean((hc1 - hc2)**2)
         latent_mse.backward(retain_graph=True)
 
         # maximize entropy of scene discrimintor output
@@ -89,6 +120,10 @@ class Trainer():
 
         # minimize ||P(hc1, hp2), x2||
         pred = self.netDE(hc1, hp2)
+        self.train_recon_discriminator(pred, img2, target.view(-1, 1).to(torch.float32), iter=5)
+        pred_score = self.netRD(pred, img2)
+        pred_nll = self.bce_criterion(pred_score, target2.view(-1, 1).to(torch.float32))
+        pred_nll.backward(retain_graph=True)
         pred_mse = self.rec_criterion(pred, img2)
         pred_mse.backward()
 
@@ -107,7 +142,7 @@ class Trainer():
         hp2 = self.netPE(img2)
 
         # minimize ||hc1 - hc2||
-        latent_mse = torch.sum((hc1 - hc2)**2)/ hc1.size(0)
+        latent_mse = torch.mean((hc1 - hc2)**2)
 
         # maximize entropy of scene discrimintor output
         target[:] = 0.5
@@ -129,10 +164,13 @@ class Trainer():
                 'netPE': self.netPE.state_dict(),
                 'netDE': self.netDE.state_dict(),
                 'netSD': self.netSD.state_dict(),
+                'netRD': self.netRD.state_dict(),
                 'optimCE': self.optimCE.state_dict(),
                 'optimPE': self.optimPE.state_dict(),
                 'optimDE': self.optimDE.state_dict(),
                 'optimSD': self.optimSD.state_dict(),
+                'optimRD': self.optimRD.state_dict(),
+
                 'total_iter': self.total_iter,
                 'best_rec': self.best_rec,
             }, is_best, 'checkpoint', self.opt.save
@@ -153,21 +191,25 @@ class Trainer():
             self.netPE.load_state_dict(checkpoint['netPE'])
             self.netDE.load_state_dict(checkpoint['netDE'])
             self.netSD.load_state_dict(checkpoint['netSD'])
-            
+            self.netRD.load_state_dict(checkpoint['netRD'])
+
             self.optimCE.load_state_dict(checkpoint['optimCE'])
             self.optimPE.load_state_dict(checkpoint['optimPE'])
             self.optimDE.load_state_dict(checkpoint['optimDE'])
-            self.optimSD.load_state_dict(checkpoint['optimSE'])
+            self.optimSD.load_state_dict(checkpoint['optimSD'])
+            self.optimRD.load_state_dict(checkpoint['optimRD'])
+            print('Success loading checkpoint!')
         except:
-            pass
-    def plot_pred(self, fnames, f_name):
-        pass
+            print('Failed to load checkpoint!')
 
-    def plot(self, f_name):
+    def plot(self):
         hp_seq = []
         hc = []
+        save_path = os.path.join(self.opt.save, 'plot')
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
         for i, vids in enumerate(self.plotDateloader):
-            torchvision.utils.save_image(vids, f_name + 'origin{}.jpg'.format(i), normalize=True)
+            torchvision.utils.save_image(vids,  os.path.join(save_path, 'origin{}.jpg'.format(i)), normalize=True)
             vids = vids.to(device)
             hp_seq.append(self.netPE(vids).clone())
             hc.append(self.netCE(vids[0:1]))
@@ -176,13 +218,14 @@ class Trainer():
         sample_num = len(hp_seq)
         for i in range(sample_num):
             pred = self.netDE(hc[i].repeat(max_step,1,1,1), hp_seq[i])
-            torchvision.utils.save_image(pred, f_name +'pred{}.jpg'.format(i), normalize=True)
+            torchvision.utils.save_image(pred, os.path.join(save_path, 'pred{}.jpg'.format(i)), normalize=True)
 
+    def unit_test(self):
+        pred = torch.randn(10, 3, 64, 64)
+        img2 = torch.randn(10, 3, 64, 64)
+        target = torch.randn(10, 1)
+        self.train_recon_discriminator(pred, img2, target)
         
-
-
-
-
 
     def evaluation(self, is_best):
         self.netCE.eval()
@@ -191,7 +234,7 @@ class Trainer():
         self.netSD.eval()
     
         self.load_chkpt(is_best=is_best)
-        self.plot('./logs/')
+        self.plot()
 
     def run(self, resume=True, is_best=False):
         self.best_rec = 1e10
@@ -222,11 +265,12 @@ class Trainer():
                 latent_mse += l_mse
                 iteration += 1
                 self.total_iter += 1
+
             trainLogger.info('{:d}\tprediction mse = {:.4f}, latent mse = {:.4f},'
             ' scene disc acc = {:.4f}%, scene disc nll = {:.4f}'.format(
                 self.total_iter, 
                 pred_mse/iteration, 
-                latent_mse/iteration, 
+                latent_mse/iteration,
                 100*sd_acc/(opt.batchSize*iteration), 
                 sd_nll/iteration))
 
@@ -257,9 +301,14 @@ class Trainer():
                 self.save_chkpt(is_best=True)
             else:
                 self.save_chkpt(is_best=False)
-
+            self.plot()
 
 if __name__ == "__main__":
 
     trainer = Trainer(opt)
-    trainer.run()
+
+    if opt.eval:
+        trainer.evaluation(True)
+    else:
+        trainer.run()
+        
