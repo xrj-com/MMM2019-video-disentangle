@@ -107,7 +107,7 @@ class Trainer():
 
         # minimize ||hc1 - hc2||
         latent_mse = torch.mean((hc1 - hc2)**2)
-        latent_mse.backward(retain_graph=True)
+        loss = latent_mse
 
         # maximize entropy of scene discrimintor output
         nll = 0
@@ -115,19 +115,19 @@ class Trainer():
             target[:] = 0.5
             out = self.netSD(hp1, hp2)
             nll = self.bce_criterion(out, target.view(-1, 1).to(torch.float32))
-            nll.backward(retain_graph=True)
+            loss += self.opt.advWeight * nll
 
         # minimize ||P(hc1, hp2), x2||
         pred = self.netDE(hc1, hp2)
         self.train_recon_discriminator(pred, img2, target.view(-1, 1).to(torch.float32), iter=5)
         pred_score = self.netRD(pred, img2)
         pred_nll = self.bce_criterion(pred_score, target2.view(-1, 1).to(torch.float32))
+        loss += pred_nll
         if self.opt.is_mse:
-            pred_nll.backward(retain_graph=True)
             pred_mse = self.rec_criterion(pred, img2)
-            pred_mse.backward()
-        else:
-            pred_nll.backward()
+            loss += pred_mse
+        
+        loss.backward()
 
         self.optimCE.step()
         self.optimPE.step()
@@ -302,7 +302,7 @@ class Trainer():
                 iteration += 1
             
             valLogger.info('\tprediction mse = {:.4f}, latent mse = {:.4f}'.format(pred_mse/iteration, latent_mse/iteration))
-
+            self.epoch_now += 1
             if (pred_mse/iteration) < self.best_rec:
                 self.best_rec = pred_mse/iteration
                 print('Saving best model so far (pred mse = {:.4f}) '.format(pred_mse/iteration) + opt.save + '/model_best.pth.tar')
@@ -310,13 +310,15 @@ class Trainer():
             else:
                 self.save_chkpt(is_best=False)
             self.plot()
+            self.plot(is_swap=True)
+
 
 if __name__ == "__main__":
 
     trainer = Trainer(opt)
 
     if opt.eval:
-        trainer.evaluation(True)
+        trainer.evaluation(False)
     else:
         utils.backup_src('./', os.path.join(opt.save, 'backUpSrc'))
         trainer.run()
