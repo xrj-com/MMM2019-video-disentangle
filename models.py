@@ -127,6 +127,39 @@ class SceneDiscriminator(nn.Module):
         x = F.sigmoid(self.fc3(x))
         return x
 
+class lstm(nn.Module):
+    def __init__(self, poseDim = 64, contentDim = 64, rnnSize, rnnLayers):
+        self.inputDim = contentDim + poseDim
+        self.hiddenSize = rnnSize
+        self.lstm = nn.LSTM(self.inputDim, self.hiddenSize, rnnLayers)
+        self.hidden = (torch.zeros(rnnLayers, 1, self.hiddenSize),
+                        torch.zeros(rnnLayers, 1, self.hiddenSize))
+
+    def forward(self, pose, content):
+        x= torch.cat((content, pose), 1)
+        poseCode, hidden = self.lstm(x, self.hidden)
+        return poseCode
+
+    #def __init__(self, poseDim = 64, contentDim = 64,rnnSize, rnnLayers):#FIXME:rnnLayers
+    #    self.input_dim = poseDim + contentDim
+    #    self.hidden_dim = rnnSize#FIXME
+    #    self.lstm = nn.LSTM(self.input_dim, self.hidden_dim)#FIXME
+    #    #self.fc = nn.Linear(poseDim+contentDim, rnnSize)
+    #    #self.lstm = nn.LSTM(rnnSize, rnnSize)
+    #    self.hidden = self.init_hidden()
+
+    #def init_hidden(self):
+    #    return (autograd.Variable(torch.zeros(1, 1, self.hidden_dim)),
+    #            autograd.Variable(torch.zeros(1, 1, self.hidden_dim)))
+
+    #def forward(self, pose, content):
+    #    x = torch.cat((content, pose), 1)
+    #    #x = self.fc(x)#FIXME
+    #    next_pose, self.hidden = self.lstm(x, self.hidden)
+    #    return next_pose
+
+        
+
 if __name__ == "__main__":
     content = ContentEncoder()
     x = torch.randn(10, 3, 64, 64)
@@ -144,3 +177,4 @@ if __name__ == "__main__":
     out = D(contentcode, postcode)
     print(out.size())
     print(out2.size())
+
