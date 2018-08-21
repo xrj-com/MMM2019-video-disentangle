@@ -9,12 +9,12 @@ class opt:
     dataVal = "/media/DATASET/MMM2019/LASIESTA-move"
     is_mse = True
     optimizer = 'adam'
-    eval = True           # optimizer to train with
+    eval = False           # optimizer to train with
     nEpochs  = 200              # max training epochs  
     seed      = 1                # random seed  
     epochSize = 50000            # number of samples per epoch  
     contentDim  = 64             # dimensionality of content vector
-    poseDim   = 5                # dimensionality of pose vector 
+    poseDim   = 64                # dimensionality of pose vector 
     imageSize = 64               # size of image
     #   dataset   = moving_mnist     # dataset
     movingDigits= 1              # if moving mnist dataset, how many digits to use
