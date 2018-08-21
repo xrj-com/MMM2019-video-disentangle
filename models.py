@@ -132,8 +132,11 @@ class lstm(nn.Module):
         self.inputDim = contentDim + poseDim
         self.hiddenSize = rnnSize
         self.lstm = nn.LSTM(self.inputDim, self.hiddenSize, rnnLayers)
-        self.hidden = (torch.zeros(rnnLayers, 1, self.hiddenSize),
-                        torch.zeros(rnnLayers, 1, self.hiddenSize))
+        self.hidden = self.init_hidden()
+    
+    def init_hidden(self):
+        return (torch.zeros(rnnLayers, 1, self.hiddenSize),
+                torch.zeros(rnnLayers, 1, self.hiddenSize))
 
     def forward(self, pose, content):
         x= torch.cat((content, pose), 1)
