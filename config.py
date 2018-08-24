@@ -3,7 +3,7 @@ class opt:
     beta1 = 0.9                      # momentum term for adam
     batchSize = 100               # batch size  
     gpu = 2               # gpu to use  
-    save = '/media/USERDATA/xrj/MMM2019/exp9'          # base directory to save logs  
+    save = 'DATAUSER/xietian'#'/home/dawn/xrj/MMM2019/exp9'          # base directory to save logs  
     name = 'default'        # checkpoint name
     dataRoot = "/media/DATASET/MMM2019/LASIESTA-move" # data root directory
     dataVal = "/media/DATASET/MMM2019/LASIESTA-move"
@@ -14,7 +14,7 @@ class opt:
     seed      = 1                # random seed  
     epochSize = 50000            # number of samples per epoch  
     contentDim  = 64             # dimensionality of content vector
-    poseDim   = 64                # dimensionality of pose vector 
+    poseDim   = 5#64                # dimensionality of pose vector 
     imageSize = 64               # size of image
     #   dataset   = moving_mnist     # dataset
     movingDigits= 1              # if moving mnist dataset, how many digits to use
@@ -29,4 +29,9 @@ class opt:
     nThreads   = 0                # number of dataloading threads
     dataPool   = 200
     dataWarmup = 10 
-    
+
+    nPast = 10
+    nFuture = 10
+    TIMESTAMPS = 20
+    rnnSize = 256
+    rnnLayers = 2

@@ -172,6 +172,53 @@ class plot_dataset(Dataset):
         return img
 
 
+class lstm_dataset(Dataset):
+    def __init__(self, root_dir, sample_num, max_step, delta=1, random_classes=False, loader=default_loader, transform=trans):
+        self.root_dir = root_dir
+        self.classes, self.class_to_idx = find_classes(root_dir)
+        self.imagesDict = make_dataset(root_dir, self.class_to_idx)
+        self.frameNumDict = {}
+        for c in self.classes:
+            self.frameNumDict[self.class_to_idx[c]] = len(self.imagesDict[self.class_to_idx[c]])
+
+        self.transform = transform
+        self.max_step = max_step
+        self.batch_size = sample_num
+        self.delta = delta
+        self.random_classes = random_classes
+        self.loader = loader
+
+        self.video_list = []
+        self.image_list = []
+        for i in range(self.batch_size):
+            video_num = len(self.classes)
+            vid = np.random.randint(video_num)
+            max_trial = 10
+            while self.frameNumDict[vid] <= self.max_step:
+                vid = np.random.randint(video_num)
+                max_trial -= 1
+                assert max_trial>0, "max_step maybe too large"
+
+            self.video_list.append(vid)
+            fn = self.frameNumDict[vid]
+
+            start = np.random.randint(fn - self.max_step)
+            # for j in range(self.max_step):
+            self.image_list += self.imagesDict[vid][start : self.max_step + start]
+
+
+    
+    def __len__(self):
+        return self.batch_size * self.max_step
+
+    def __getitem__(self, index):
+        img = self.loader(self.image_list[index])
+        if self.transform is not None:
+            img = self.transform(img)
+        return img
+
+
+
 if __name__ == "__main__":
     dir = "/media/DATASET/MMM2019/LASIESTA/"
     # sg = scenePairs_dataset(dir, 500, 10, 10)
