@@ -40,7 +40,7 @@ class Trainer():
 
         self.trainDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, opt.epochSize, opt.maxStep), opt.batchSize, num_workers=4)
         self.valDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, 10, opt.maxStep), opt.batchSize, num_workers=4)
-        self.plotDateloader = DataLoader(plot_dataset(opt.dataVal, 10, 20), 20)
+        self.plotDateloader = DataLoader(plot_dataset(opt.dataVal, 10, 20, delta=4), 20)
 
         self.rec_criterion = nn.MSELoss()
         self.sim_criterion = nn.MSELoss()
@@ -119,13 +119,16 @@ class Trainer():
 
         # minimize ||P(hc1, hp2), x2||
         pred = self.netDE(hc1, hp2)
-        self.train_recon_discriminator(pred, img2, target.view(-1, 1).to(torch.float32), iter=5)
-        pred_score = self.netRD(pred, img2)
-        pred_nll = self.bce_criterion(pred_score, target2.view(-1, 1).to(torch.float32))
-        loss += pred_nll
-        if self.opt.is_mse:
-            pred_mse = self.rec_criterion(pred, img2)
-            loss += pred_mse
+        
+        if self.opt.is_advt:
+            self.train_recon_discriminator(pred, img2, target.view(-1, 1).to(torch.float32), iter=5)
+            pred_score = self.netRD(pred, img2)
+            pred_nll = self.bce_criterion(pred_score, target2.view(-1, 1).to(torch.float32))
+            loss += pred_nll
+
+
+        pred_mse = self.rec_criterion(pred, img2)
+        loss += pred_mse
         
         loss.backward()
 
@@ -133,7 +136,7 @@ class Trainer():
         self.optimPE.step()
         self.optimDE.step()
 
-        return pred_nll.item(), latent_mse.item()
+        return pred_mse.item(), latent_mse.item()
 
     def test(self, img1, img2, img3, origin_target):
         target = origin_target.clone()
@@ -204,28 +207,38 @@ class Trainer():
         except:
             print('Failed to load checkpoint!')
 
-    def plot(self, is_swap=False):
+    def plot(self, dir_name, is_swap=False, hc_zero = False, hp_zero = False):
+        self.netPE.eval()
+        self.netCE.eval()
+        self.netDE.eval()
         hp_seq = []
         hc = []
-        dir = 'plot_swap' if is_swap else 'plot'
-        save_path = os.path.join(self.opt.save, dir)
+        # dir = 'plot_swap' if is_swap else 'plot'
+        # dir = "plot_hc_zero"
+        save_path = os.path.join(self.opt.save, dir_name)
         if not os.path.exists(save_path):
             os.makedirs(save_path)
         for i, vids in enumerate(self.plotDateloader):
-            torchvision.utils.save_image(vids,  os.path.join(save_path, 'origin{}.jpg'.format(i)), normalize=True)
+            torchvision.utils.save_image(vids,  os.path.join(save_path, 'origin{}.jpg'.format(i)), nrow=4, normalize=True)
             vids = vids.to(device)
             hp_seq.append(self.netPE(vids).clone())
             hc.append(self.netCE(vids[0:1]))
-        
         max_step = hp_seq[0].size(0)
         sample_num = len(hp_seq)
         for i in range(sample_num):
             if is_swap:
-                ii = 1
+                ii = 0
             else:
                 ii = i
+            if hc_zero:
+                hc[i][:] = 0.0
+            if hp_zero:
+                hp_seq[ii][:] = 0.0
+
             pred = self.netDE(hc[i].repeat(max_step,1,1,1), hp_seq[ii])
-            torchvision.utils.save_image(pred, os.path.join(save_path, 'pred{}.jpg'.format(i)), normalize=True)
+            torchvision.utils.save_image(pred, os.path.join(save_path, 'pred{}.jpg'.format(i)), nrow=4, normalize=True)
+        
+
 
     def unit_test(self):
         pred = torch.randn(10, 3, 64, 64)
@@ -241,8 +254,11 @@ class Trainer():
         self.netSD.eval()
         print('Evalation..')
         self.load_chkpt(is_best=is_best)
-        self.plot()
-        self.plot(is_swap=True)
+        self.plot('eval_plot')
+        self.plot('eval_plot_swap', is_swap=True)
+        self.plot('eval_plot_hc_zero', hc_zero=True)
+        self.plot('eval_plot_hp_zero', hp_zero=True)
+        # self.plot(is_swap=True)
 
     def run(self, resume=True, is_best=False):
         self.best_rec = 1e10
@@ -274,7 +290,7 @@ class Trainer():
                 iteration += 1
                 self.total_iter += 1
 
-            trainLogger.info('{:d}\tprediction nll = {:.4f}, latent mse = {:.4f},'
+            trainLogger.info('{:d}\tprediction mse = {:.4f}, latent mse = {:.4f},'
             ' scene disc acc = {:.4f}%, scene disc nll = {:.4f}'.format(
                 self.total_iter, 
                 pred_mse/iteration, 
@@ -309,8 +325,11 @@ class Trainer():
                 self.save_chkpt(is_best=True)
             else:
                 self.save_chkpt(is_best=False)
-            self.plot()
-            self.plot(is_swap=True)
+
+            self.plot('train_plot')
+            self.plot('train_plot_swap', is_swap=True)
+            self.plot('train_plot_hc_zero', hc_zero=True)
+            self.plot('train_plot_hp_zero', hp_zero=True)
 
 
 if __name__ == "__main__":

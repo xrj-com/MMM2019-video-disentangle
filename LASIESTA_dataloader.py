@@ -148,7 +148,7 @@ class plot_dataset(Dataset):
             video_num = len(self.classes)
             vid = np.random.randint(video_num)
             max_trial = 10
-            while self.frameNumDict[vid] <= self.max_step:
+            while self.frameNumDict[vid] <= self.max_step * delta:
                 vid = np.random.randint(video_num)
                 max_trial -= 1
                 assert max_trial>0, "max_step maybe too large"
@@ -156,9 +156,9 @@ class plot_dataset(Dataset):
             self.video_list.append(vid)
             fn = self.frameNumDict[vid]
 
-            start = np.random.randint(fn - self.max_step)
+            start = np.random.randint(fn - self.max_step * delta)
             # for j in range(self.max_step):
-            self.image_list += self.imagesDict[vid][start : self.max_step + start]
+            self.image_list += self.imagesDict[vid][start : self.max_step * delta + start : delta]
 
 
     
