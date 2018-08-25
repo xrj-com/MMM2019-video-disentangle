@@ -129,7 +129,7 @@ class Trainer():
             tmp_pose, hidden = self.lstm(pose_reps[t].view([opt.batchSize, opt.poseDim]), content_rep.view([1, opt.batchSize, opt.contentDim]), hidden)
             gen_pose.append(tmp_pose)
             #loss += self.lstm_criterion(tmp_pose, torch.unsqueeze(pose_reps[t+1],0))
-        for t in range(opt.nPast, npt.TIMESTAMPS):
+        for t in range(opt.nPast, opt.TIMESTAMPS):
             tmp_pose, hidden = self.lstm(gen_pose[t-1].view([opt.batchSize, opt.poseDim]), content_rep.view([1, opt.batchSize, opt.contentDim]), hidden)
             gen_pose.append(tmp_pose.clone())
             #loss += self.lstm_criterion(tmp_pose, torch.unsqueeze(pose_reps[t+1],0))
@@ -177,6 +177,7 @@ class Trainer():
             checkpoint = torch.load(model_path)
             self.netCE.load_state_dict(checkpoint['netCE'])
             self.netPE.load_state_dict(checkpoint['netPE'])
+            self.netDE.load_state_dict(checkpoint['netDE'])
             print('Success loading CE and PE!')
         except:
             print('Failed to load CE and PE!')
@@ -212,17 +213,23 @@ class Trainer():
                 poseBatch = poseBatch.to(device)
                 contentBatch = contentBatch.to(device)
 
-                gen_pose = (self.lstm_pred(contentBatch, poseBatch))
+                gen_pose = self.lstm_pred(contentBatch, poseBatch)
                 gen_pose_seq.append(gen_pose)
-        
+        #ts = torch.zeros(20, 5, 1, 1)
+        #print(ts)
+        #ts = ts.to(device)
         for i in range(sample_num):
-            if is_swap:
-                ii = 1
-            else:
-                ii = i
-            print(hc[i].repeat(max_step,1,1,1))
-            print(gen_pose_seq[ii])
-            pred = self.netDE(hc[i].repeat(max_step,1,1,1), gen_pose_seq[ii])#FIXME: the dimension may be wrong
+            #if is_swap:
+            #    ii = 1
+            #else:
+            #    ii = i
+            #print(hc[i].repeat(max_step,1,1,1).size())
+            #print(gen_pose_seq[i].size())
+            ii = i // opt.batchSize
+            gen = torch.transpose(torch.cat(gen_pose_seq[ii], 0), 1, 2).view([20, 5, 10, 1])
+            b = i % opt.batchSize
+        #    pred = self.netDE(hc[i].repeat(max_step - 1,1,1,1), ts)#FIXME: the dimension may be wrong
+            pred = self.netDE(hc[i].repeat(max_step - 1,1,1,1), gen.narrow(2, b, 1))#FIXME: the dimension may be wrong
             torchvision.utils.save_image(pred, os.path.join(save_path, 'pred{}.jpg'.format(i)), normalize=True)
 
     def train_main(self, resume = True, is_best = False):
@@ -332,7 +339,7 @@ class Trainer():
             else:
                 self.lstm_save_chkpt(is_best=False)
             self.lstm_plot()
-            self.lstm_plot(is_swap=True)
+            #self.lstm_plot(is_swap=True)
 
 
     def train_recon_discriminator(self, pred, img2, origin_target, iter=5):
