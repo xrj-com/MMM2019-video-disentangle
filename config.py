@@ -1,9 +1,9 @@
 class opt:
     learningRate = 0.002             # learning rate  
     beta1 = 0.9                      # momentum term for adam
-    batchSize = 100               # batch size  
-    gpu = 2               # gpu to use  
-    save = 'DATAUSER/xietian'#'/home/dawn/xrj/MMM2019/exp9'          # base directory to save logs  
+    batchSize = 10               # batch size  
+    gpu = 1#2               # gpu to use  
+    save = '/media/USERDATA/xietian/exp1'#'/home/dawn/xrj/MMM2019/exp9'          # base directory to save logs  
     name = 'default'        # checkpoint name
     dataRoot = "/media/DATASET/MMM2019/LASIESTA-move" # data root directory
     dataVal = "/media/DATASET/MMM2019/LASIESTA-move"
@@ -12,7 +12,7 @@ class opt:
     eval = False           # optimizer to train with
     nEpochs  = 200              # max training epochs  
     seed      = 1                # random seed  
-    epochSize = 50000            # number of samples per epoch  
+    epochSize = 100            # number of samples per epoch  
     contentDim  = 64             # dimensionality of content vector
     poseDim   = 5#64                # dimensionality of pose vector 
     imageSize = 64               # size of image
@@ -35,3 +35,4 @@ class opt:
     TIMESTAMPS = 20
     rnnSize = 256
     rnnLayers = 2
+    save_lstm = '/media/USERDATA/xietian/exp1/lstm'

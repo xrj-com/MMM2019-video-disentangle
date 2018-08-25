@@ -155,18 +155,18 @@ class lstmBlock(nn.Module):
         for m in self._modules:
             norm_init(self._modules[m], mean, std)
 
-    def forward(self, pose, content, (h,c)):
+    def forward(self, pose, content, hidden):
         #pose = pose.reshape(1, 3, 5)
         pose = torch.unsqueeze(pose, 0)
-        print(pose.size())
-        print(content.size())
+        #print(pose.size())
+        #print(content.size())
         x = torch.cat((content, pose), 2)#FIXME: need define in __init__ as a net?
         #print(tensor.size())
         #print(h.size())
         #print(c.size())
         #x = autograd.Variable(tensor)
-        print(x.size())
-        x, (hn, cn) = self.lstm(x, (h,c))
+        #print(x.size())
+        x, (hn, cn) = self.lstm(x, hidden)
         poseCode = torch.tanh(self.fc(x))
         if self.is_norm == True:
             poseCode = F.normalize(poseCode, 2)
@@ -339,4 +339,10 @@ if __name__ == "__main__":
     t = torch.transpose(t, 0, 1)
     print(t.size())
     print(t[0])
+    m = torch.randn(21, 10, 5, 1)
+    print(m[:,0,0,0])
+    m = m.view([21,10,5])
+    print(m.size())
+    print(m[:,0,0])
+    print(m[0].size())
 

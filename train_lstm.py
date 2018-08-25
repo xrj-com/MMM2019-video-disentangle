@@ -14,7 +14,7 @@ from dumblog import dlog
 trainLogger = dlog(os.path.join(opt.save,'train'))
 valLogger = dlog(os.path.join(opt.save,'val'))
 
-
+torch.cuda.set_device(1)
 device = torch.device("cuda:{:d}".format(opt.gpu) if torch.cuda.is_available() else "cpu")
 
 class Trainer():
@@ -51,7 +51,7 @@ class Trainer():
         self.lstm = lstmBlock(opt.poseDim, opt.contentDim, opt.rnnSize, opt.rnnLayers, opt.normalize).to(device)#FIXME: normalize is the same or another?
         self.lstm.weight_init(mean = 0, std = 0.02)
         self.optimLSTM = torch.optim.Adam(self.lstm.parameters(), lr = opt.learningRate, betas = (opt.beta1, 0.999))
-        self.lstmDataloader = DataLoader(lstm_dataset(opt.dataVal, opt.epochSize, 21), 21, num_worker = 4)# nPast+nFuture+1 = 21 FIXME: epochSize instead of iter*batchSize
+        self.lstmDataloader = DataLoader(lstm_dataset(opt.dataVal, opt.epochSize, 21), 21, num_workers = 4)# nPast+nFuture+1 = 21 FIXME: epochSize instead of iter*batchSize
         self.lstm_criterion = nn.MSELoss()
 
     def train_lstm(self, content_rep, pose_reps):#FIXME: content_rep is consistant one stamp
@@ -61,13 +61,22 @@ class Trainer():
 
         hidden = (torch.zeros(opt.rnnLayers, batchSize, opt.rnnSize),
                 torch.zeros(opt.rnnLayers, batchSize, opt.rnnSize))
+        hidden = (hidden[0].to(device), hidden[1].to(device))
         gen_pose = []
         loss = 0
 
         for t in range(opt.TIMESTAMPS):
-            tmp_pose, hidden = self.lstm(pose_reps[t], content_rep, hidden)
-            gen_pose.append(tmp_pose)
-            loss += self.lstm_criterion(tmp_pose, torch.unsqueeze(pose_reps[t+1],0))#FIXME: reps len is TIMESTAMPS+1 = 21
+            #print(pose_reps[0].size())
+            #print(content_rep.size())
+            tmp_pose, hidden = self.lstm(pose_reps[t].view([opt.batchSize, opt.poseDim]), content_rep.view([1, opt.batchSize, opt.contentDim]), hidden)
+            gen_pose.append(tmp_pose.clone())
+            #print(tmp_pose.size())
+            with torch.no_grad():#FIXME: no use?
+                target = torch.tensor(torch.unsqueeze(pose_reps[t+1].view([opt.batchSize, opt.poseDim]),0), requires_grad = False)
+            #target.to(device)
+            #print(target.requires_grad)
+            #print(target.size())
+            loss += self.lstm_criterion(tmp_pose, target)#FIXME: reps len is TIMESTAMPS+1 = 21
         loss.backward()
         self.optimLSTM.step()
 
@@ -80,28 +89,52 @@ class Trainer():
 
         hidden = (torch.zeros(opt.rnnLayers, batchSize, opt.rnnSize),
                 torch.zeros(opt.rnnLayers, batchSize, opt.rnnSize))
+        hidden = (hidden[0].to(device), hidden[1].to(device))
         gen_pose = []
         loss = 0
 
         for t in range(opt.TIMESTAMPS):
-            tmp_pose, hidden = self.lstm(pose_reps[t], content_rep, hidden)
-            gen_pose.append(tmp_pose)
-            loss += self.lstm_criterion(tmp_pose, torch.unsqueeze(pose_reps[t+1],0))#FIXME: reps len is TIMESTAMPS+1 = 21
+            tmp_pose, hidden = self.lstm(pose_reps[t].view([opt.batchSize, opt.poseDim]), content_rep.view([1, opt.batchSize, opt.contentDim]), hidden)
+            gen_pose.append(tmp_pose.clone())
+            with torch.no_grad():
+                target = torch.tensor(torch.unsqueeze(pose_reps[t+1].view([opt.batchSize, opt.poseDim]),0), requires_grad = False)
+            #target.to(device)
+            nll = self.lstm_criterion(tmp_pose, target)#FIXME: reps len is TIMESTAMPS+1 = 21
+            loss += nll.data[0]
 
         # pred version
         '''
         for t in range(opt.nPast):
-            tmp_pose, hidden = self.lstm(pose_reps[t], content_rep, hidden)
+            tmp_pose, hidden = self.lstm(pose_reps[t].view([opt.batchSize, opt.poseDim]), content_rep.view([1, opt.batchSize, opt.contentDim]), hidden)
             gen_pose.append(tmp_pose)
             loss += self.lstm_criterion(tmp_pose, torch.unsqueeze(pose_reps[t+1],0))
         for t in range(opt.nPast, npt.TIMESTAMPS):
-            tmp_pose, hidden = self.lstm(gen_pose[t-1], content_rep, hidden)
+            tmp_pose, hidden = self.lstm(gen_pose[t-1].view([opt.batchSize, opt.poseDim]), content_rep.view([1, opt.batchSize, opt.contentDim]), hidden)
             gen_pose.append(tmp_pose)
             loss += self.lstm_criterion(tmp_pose, torch.unsqueeze(pose_reps[t+1],0))
         '''
 
         return loss.item()/(opt.nPast + opt.nFuture)
-        
+#lstm pred
+    def lstm_pred(self, content_rep, pose_reps):
+        self.lstm.eval()
+        batchSize = opt.batchSize
+
+        hidden = (torch.zeros(opt.rnnLayers, batchSize, opt.rnnSize),
+                torch.zeros(opt.rnnLayers, batchSize, opt.rnnSize))
+        hidden = (hidden[0].to(device), hidden[1].to(device))
+        gen_pose = []
+        #loss = 0        
+        for t in range(opt.nPast):
+            tmp_pose, hidden = self.lstm(pose_reps[t].view([opt.batchSize, opt.poseDim]), content_rep.view([1, opt.batchSize, opt.contentDim]), hidden)
+            gen_pose.append(tmp_pose)
+            #loss += self.lstm_criterion(tmp_pose, torch.unsqueeze(pose_reps[t+1],0))
+        for t in range(opt.nPast, npt.TIMESTAMPS):
+            tmp_pose, hidden = self.lstm(gen_pose[t-1].view([opt.batchSize, opt.poseDim]), content_rep.view([1, opt.batchSize, opt.contentDim]), hidden)
+            gen_pose.append(tmp_pose.clone())
+            #loss += self.lstm_criterion(tmp_pose, torch.unsqueeze(pose_reps[t+1],0))
+        return gen_pose
+
  
 # lstm chkpt
     def lstm_save_chkpt(self, is_best):
@@ -112,15 +145,15 @@ class Trainer():
 
                 'total_iter': self.total_iter,
                 'best_rec': self.best_rec
-            }, is_best, 'checkpoint', self.opt.save
+            }, is_best, 'checkpoint', self.opt.save_lstm
         )
 
     def lstm_load_chkpt(self, is_best):
         if is_best:
-            filename = 'model_best.pth.tar'
+            filename = 'model_best.pth.tar'#FIXME: no need to name lstm_model_best
         else:
             filename = 'checkpoint.pth.tar'
-        model_path = os.path.join(opt.save, filename)
+        model_path = os.path.join(opt.save_lstm, filename)
         try:
             checkpoint = torch.load(model_path)
             self.epoch_now = checkpoint['epoch']
@@ -133,19 +166,64 @@ class Trainer():
             print('Failed to load checkpoint!')
 
         # load CE and PE
-        if is_best:
-            filename = 'model_best.pth.tar'
-        else:
-            filename = 'checkpoint.pth.tar'
+    def load_CE(self):
+        #if is_best:
+        filename = 'model_best.pth.tar'
+        #else:
+        #    filename = 'checkpoint.pth.tar'
         model_path = os.path.join(opt.save, filename)#FIXME: need change the save to the model path
         try:
+            print(model_path)
             checkpoint = torch.load(model_path)
-            sef.netCE.load_state_dict(checkpoint['netCE'])
-            sef.netPE.load_state_dict(checkpoint['netPE'])
+            self.netCE.load_state_dict(checkpoint['netCE'])
+            self.netPE.load_state_dict(checkpoint['netPE'])
             print('Success loading CE and PE!')
         except:
             print('Failed to load CE and PE!')
- 
+    #plot lstm pred reconstruciton
+    def lstm_plot(self, is_swap=False):
+        hp_seq = []
+        hc = []
+        gen_pose_seq = []
+        dir = 'plot_swap' if is_swap else 'plot'
+        save_path = os.path.join(self.opt.save_lstm, dir)
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        for i, vids in enumerate(self.lstmDataloader):
+            torchvision.utils.save_image(vids, os.path.join(save_path, 'origin{}.jpg'.format(i)), normalize=True)#FIXME
+            vids = vids.to(device)
+            hp_seq.append(self.netPE(vids).clone())
+            hc.append(self.netCE(vids[0:1]))
+        
+        max_step = hp_seq[0].size(0)
+        sample_num = len(hp_seq)
+        for i in range(sample_num):# iter = sample_num/batchSize
+            if i % opt.batchSize == opt.batchSize - 1:
+                #print(hp_seq[0].size())
+                #print(hc[0].size())
+
+                poseBatch = torch.cat(hp_seq[i-opt.batchSize+1 : i+1], 2)
+                contentBatch = torch.cat(hc[i-opt.batchSize+1 : i+1], 2)
+            
+                #print(poseBatch.size())
+                #print(contentBatch.size())
+                poseBatch = torch.transpose(poseBatch, 1, 2)
+                contentBatch = torch.transpose(contentBatch, 1, 2)
+                poseBatch = poseBatch.to(device)
+                contentBatch = contentBatch.to(device)
+
+                gen_pose = (self.lstm_pred(contentBatch, poseBatch))
+                gen_pose_seq.append(gen_pose)
+        
+        for i in range(sample_num):
+            if is_swap:
+                ii = 1
+            else:
+                ii = i
+            print(hc[i].repeat(max_step,1,1,1))
+            print(gen_pose_seq[ii])
+            pred = self.netDE(hc[i].repeat(max_step,1,1,1), gen_pose_seq[ii])#FIXME: the dimension may be wrong
+            torchvision.utils.save_image(pred, os.path.join(save_path, 'pred{}.jpg'.format(i)), normalize=True)
 
     def train_main(self, resume = True, is_best = False):
         self.best_rec = 1e10
@@ -158,9 +236,10 @@ class Trainer():
         self.netDE.eval()#FIXME: DE and SD is no need
         self.netSD.eval()
         print('Evalation..')
-        self.load_chkpt(is_best=is_best)
- 
+        #self.load_chkpt(is_best=is_best)
+        self.load_CE()
         if resume:
+            print(resume)
             self.lstm_load_chkpt(is_best=is_best)
 
         #max_step = hp_seq[0].size(0)#timestamps, 21
@@ -191,17 +270,20 @@ class Trainer():
 
             for i in range(sample_num):# iter = sample_num/batchSize
                 if i % opt.batchSize == opt.batchSize - 1:
-                    poseBatch = torch.FloatTensor(hp_seq[i-opt.batchSize+1 : i+1])
-                    contentBatch = torch.FloatTensor(hc[i-opt.batchSize+1 : i+1])
+                    #print(hp_seq[0].size())
+                    #print(hc[0].size())
+
+                    poseBatch = torch.cat(hp_seq[i-opt.batchSize+1 : i+1], 2)
+                    contentBatch = torch.cat(hc[i-opt.batchSize+1 : i+1], 2)
             
-                    print(poseBatch.size())
-                    print(contentBatch.size())
-                    poseBatch = torch.transpose(poseBatch, 0, 1)
-                    contentBatch = torch.transpose(contentBatch, 0, 1)
+                    #print(poseBatch.size())
+                    #print(contentBatch.size())
+                    poseBatch = torch.transpose(poseBatch, 1, 2)
+                    contentBatch = torch.transpose(contentBatch, 1, 2)
                     poseBatch = poseBatch.to(device)
                     contentBatch = contentBatch.to(device)
-                    print(poseBatch.size())
-                    print(contentBatch.size())
+                    #print(poseBatch.size())
+                    #print(contentBatch.size())
 
                     err = self.train_lstm(contentBatch, poseBatch)
                     pred_mse += err
@@ -228,11 +310,11 @@ class Trainer():
 
             for i in range(sample_num):# iter = sample_num/batchSize
                 if i % opt.batchSize == opt.batchSize - 1:
-                    poseBatch = torch.FloatTensor(val_hp_seq[i-opt.batchSize+1 : i+1])
-                    contentBatch = torch.FloatTensor(val_hc[i-opt.batchSize+1 : i+1])
+                    poseBatch = torch.cat(val_hp_seq[i-opt.batchSize+1 : i+1], 2)
+                    contentBatch = torch.cat(val_hc[i-opt.batchSize+1 : i+1], 2)
             
-                    poseBatch = torch.transpose(poseBatch, 0, 1)
-                    contentBatch = torch.transpose(contentBatch, 0, 1)
+                    poseBatch = torch.transpose(poseBatch, 1, 2)
+                    contentBatch = torch.transpose(contentBatch, 1, 2)
                     poseBatch = poseBatch.to(device)
                     contentBatch = contentBatch.to(device)
 
@@ -249,7 +331,8 @@ class Trainer():
                 self.lstm_save_chkpt(is_best=True)
             else:
                 self.lstm_save_chkpt(is_best=False)
-
+            self.lstm_plot()
+            self.lstm_plot(is_swap=True)
 
 
     def train_recon_discriminator(self, pred, img2, origin_target, iter=5):
@@ -530,5 +613,5 @@ if __name__ == "__main__":
     #    utils.backup_src('./', os.path.join(opt.save, 'backUpSrc'))
     #    trainer.run()
     
-    utils.backup_src('./', os.path.join(opt.save, 'backUpSrc'))
-    trainer.train_main()
+    utils.backup_src('./', os.path.join(opt.save_lstm, 'backUpSrc'))
+    trainer.train_main(resume= False)
