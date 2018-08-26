@@ -40,7 +40,7 @@ class Trainer():
 
         self.trainDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, opt.epochSize, opt.maxStep), opt.batchSize, num_workers=4)
         self.valDataloader = DataLoader(scenePairs_dataset(opt.dataRoot, 10, opt.maxStep), opt.batchSize, num_workers=4)
-        self.plotDateloader = DataLoader(plot_dataset(opt.dataVal, 10, 20, delta=4), 20)
+        self.plotDateloader = DataLoader(plot_dataset(opt.dataVal, 10, 20, delta=4, random_seed=1), 20)
 
         self.rec_criterion = nn.MSELoss()
         self.sim_criterion = nn.MSELoss()
@@ -187,25 +187,25 @@ class Trainer():
         else:
             filename = 'checkpoint.pth.tar'
         model_path = os.path.join(opt.save, filename)
-        try:
-            checkpoint = torch.load(model_path)
-            self.epoch_now = checkpoint['epoch']
-            self.total_iter = checkpoint['total_iter']
-            self.best_rec = checkpoint['best_rec']
-            self.netCE.load_state_dict(checkpoint['netCE'])
-            self.netPE.load_state_dict(checkpoint['netPE'])
-            self.netDE.load_state_dict(checkpoint['netDE'])
-            self.netSD.load_state_dict(checkpoint['netSD'])
-            self.netRD.load_state_dict(checkpoint['netRD'])
+        # try:
+        checkpoint = torch.load(model_path)
+        self.epoch_now = checkpoint['epoch']
+        self.total_iter = checkpoint['total_iter']
+        self.best_rec = checkpoint['best_rec']
+        self.netCE.load_state_dict(checkpoint['netCE'])
+        self.netPE.load_state_dict(checkpoint['netPE'])
+        self.netDE.load_state_dict(checkpoint['netDE'])
+        self.netSD.load_state_dict(checkpoint['netSD'])
+        self.netRD.load_state_dict(checkpoint['netRD'])
 
-            self.optimCE.load_state_dict(checkpoint['optimCE'])
-            self.optimPE.load_state_dict(checkpoint['optimPE'])
-            self.optimDE.load_state_dict(checkpoint['optimDE'])
-            self.optimSD.load_state_dict(checkpoint['optimSD'])
-            self.optimRD.load_state_dict(checkpoint['optimRD'])
-            print('Success loading {}th epoch checkpoint!'.format(self.epoch_now))
-        except:
-            print('Failed to load checkpoint!')
+        self.optimCE.load_state_dict(checkpoint['optimCE'])
+        self.optimPE.load_state_dict(checkpoint['optimPE'])
+        self.optimDE.load_state_dict(checkpoint['optimDE'])
+        self.optimSD.load_state_dict(checkpoint['optimSD'])
+        self.optimRD.load_state_dict(checkpoint['optimRD'])
+        print('Success loading {}th epoch checkpoint!'.format(self.epoch_now))
+        # except:
+        #     print('Failed to load checkpoint!')
 
     def plot(self, dir_name, is_swap=False, hc_zero = False, hp_zero = False):
         self.netPE.eval()
@@ -220,6 +220,7 @@ class Trainer():
             os.makedirs(save_path)
         for i, vids in enumerate(self.plotDateloader):
             torchvision.utils.save_image(vids,  os.path.join(save_path, 'origin{}.jpg'.format(i)), nrow=4, normalize=True)
+            torch.save(vids.to(torch.device('cpu')), os.path.join(save_path,'origin{}.pth.tar'.format(i)))
             vids = vids.to(device)
             hp_seq.append(self.netPE(vids).clone())
             hc.append(self.netCE(vids[0:1]))
@@ -237,6 +238,7 @@ class Trainer():
 
             pred = self.netDE(hc[i].repeat(max_step,1,1,1), hp_seq[ii])
             torchvision.utils.save_image(pred, os.path.join(save_path, 'pred{}.jpg'.format(i)), nrow=4, normalize=True)
+            torch.save(pred.to(torch.device('cpu')), os.path.join(save_path,'pred{}.pth.tar'.format(i)))
         
 
 
@@ -248,11 +250,12 @@ class Trainer():
         
 
     def evaluation(self, is_best):
+
+        print('Evalation..')
         self.netCE.eval()
         self.netPE.eval()
         self.netDE.eval()
         self.netSD.eval()
-        print('Evalation..')
         self.load_chkpt(is_best=is_best)
         self.plot('eval_plot')
         self.plot('eval_plot_swap', is_swap=True)

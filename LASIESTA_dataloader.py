@@ -127,7 +127,7 @@ class scenePairs_dataset(Dataset):
         return img_start, img_end1, img_end2, 1
     
 class plot_dataset(Dataset):
-    def __init__(self, root_dir, sample_num, max_step, delta=1, random_classes=False, loader=default_loader, transform=trans):
+    def __init__(self, root_dir, sample_num, max_step, delta=1, random_seed=None, loader=default_loader, transform=trans):
         self.root_dir = root_dir
         self.classes, self.class_to_idx = find_classes(root_dir)
         self.imagesDict = make_dataset(root_dir, self.class_to_idx)
@@ -139,9 +139,9 @@ class plot_dataset(Dataset):
         self.max_step = max_step
         self.batch_size = sample_num
         self.delta = delta
-        self.random_classes = random_classes
+        self.random_seed = random_seed
         self.loader = loader
-
+        np.random.seed(self.random_seed)
         self.video_list = []
         self.image_list = []
         for i in range(self.batch_size):

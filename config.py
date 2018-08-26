@@ -7,14 +7,14 @@ class opt:
     name = 'default'        # checkpoint name
     dataRoot = "/media/DATASET/MMM2019/LASIESTA-move" # data root directory
     dataVal = "/media/DATASET/MMM2019/LASIESTA-move"
-    is_advt = False
+    is_advt = True
     optimizer = 'adam'
-    eval = False           # optimizer to train with
+    eval = True           # optimizer to train with
     nEpochs  = 200              # max training epochs  
     seed      = 1                # random seed  
     epochSize = 50000            # number of samples per epoch  
     contentDim  = 64             # dimensionality of content vector
-    poseDim   = 5                # dimensionality of pose vector 
+    poseDim   = 5               # dimensionality of pose vector 
     imageSize = 64               # size of image
     #   dataset   = moving_mnist     # dataset
     movingDigits= 1              # if moving mnist dataset, how many digits to use
